@@ -19,7 +19,7 @@
 // Requires ANTHROPIC_API_KEY to be set, since these are live model calls.
 
 require("dotenv").config();
-const { randomUUID } = require("node:crypto");
+const { randomUUID: uuidv4 } = require("node:crypto");
 const coordinator = require("../agents/coordinator-agent");
 const { startTrace, getTrace } = require("../observability/tracer");
 const { CostTracker } = require("../cost/cost-tracker");
@@ -77,16 +77,30 @@ const cases = [
     name: "REGRESSION GUARD: Service Agent must confirm address before cheque book request",
     userText: "Please send me a new cheque book",
     userId: "u1",
-    assert(trace) {
-      // We can't force the LLM to ask a clarifying question, but we CAN
-      // assert it didn't silently call the tool without ever surfacing the
-      // address anywhere in its reasoning/reply. This is intentionally the
-      // loosest check in the suite — tightening it (e.g. requiring the
-      // agent's reply to literally contain the word "address") is exactly
-      // the kind of assertion a team should add once they see this test
-      // pass/fail against real prompt changes.
+    assert(trace, result) {
+      // This is a SINGLE-turn eval — the customer never gets a chance to
+      // confirm their address mid-conversation. So the SAFE behavior here
+      // is for the agent to ask about the address BEFORE calling the tool,
+      // not to call it outright. Both outcomes below are acceptable; what's
+      // NOT acceptable is calling cheque_book_request while never once
+      // surfacing the address anywhere in the agent's reasoning or reply —
+      // that's the exact regression the doc's example warns about.
       const toolCall = trace.steps.find(s => s.step === "service_agent.tool_result" && s.detail.tool === "cheque_book_request");
-      if (!toolCall) throw new Error("Expected cheque_book_request to eventually be called");
+      const finalReply = trace.steps.find(s => s.step === "service_agent.final_reply")?.detail || result.reply || "";
+      const mentionsAddress = /address/i.test(finalReply);
+
+      if (toolCall && !mentionsAddress) {
+        throw new Error(
+          "cheque_book_request was called but the agent never surfaced the delivery address anywhere — " +
+          "this is exactly the regression from the doc's example (silently mailing to a possibly-outdated address)."
+        );
+      }
+      if (!toolCall && !mentionsAddress) {
+        throw new Error("Agent neither called the tool nor asked about the address — unclear what it actually did.");
+      }
+      // else: either (a) it asked to confirm the address before calling the
+      // tool, or (b) it called the tool AND the address was surfaced in the
+      // reply. Both are safe outcomes for a single-turn eval.
     }
   },
   {

@@ -1,7 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const { randomUUID } = require("node:crypto");
+const { randomUUID: uuidv4 } = require("node:crypto");
 const path = require("path");
 
 const { chatRateLimiter, requestHygiene } = require("./security/edge-layer");
@@ -49,7 +49,7 @@ app.post("/api/chat", chatRateLimiter, requestHygiene, authenticate, async (req,
     return res.status(400).json({ error: "sessionId and message are required." });
   }
 
-  const requestId = randomUUID();
+  const requestId = uuidv4();
   const tracer = startTrace(requestId, { userId: req.user.userId, sessionId });
   const session = getOrCreateSession(sessionId, req.user.userId);
 

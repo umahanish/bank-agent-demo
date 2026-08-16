@@ -12,12 +12,12 @@
 // The in-memory array below preserves the same shape: enqueue -> pending ->
 // resolve -> side effect.
 
-const { randomUUID } = require("node:crypto");
+const { randomUUID: uuidv4 } = require("node:crypto");
 
 const queue = new Map(); // approvalId -> job
 
 function enqueue(job) {
-  const approvalId = randomUUID();
+  const approvalId = uuidv4();
   const record = {
     approvalId,
     status: "pending", // pending | approved | rejected
