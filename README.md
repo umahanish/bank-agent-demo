@@ -79,8 +79,7 @@ Open **http://localhost:3000**, pick **John** or **Sanjay**, and chat. Try:
 ## Architecture — step by step
 
 Same diagrams as the original workshop deck, dropped straight in as images
-so they render everywhere (GitHub, plain Markdown viewers, PDFs) without
-needing Mermaid support. Each step is the *complete* picture as of that
+so they render everywhere (GitHub, plain Markdown viewers, PDFs). Each step is the *complete* picture as of that
 point in the build — click to expand, and the code reference underneath
 tells you exactly which file implements what you're looking at.
 
