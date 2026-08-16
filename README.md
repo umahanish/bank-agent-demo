@@ -79,7 +79,8 @@ Open **http://localhost:3000**, pick **John** or **Sanjay**, and chat. Try:
 ## Architecture — step by step
 
 Same diagrams as the original workshop deck, dropped straight in as images
-so they render everywhere (GitHub, plain Markdown viewers, PDFs). Each step is the *complete* picture as of that
+so they render everywhere (GitHub, plain Markdown viewers, PDFs) without
+needing Mermaid support. Each step is the *complete* picture as of that
 point in the build — click to expand, and the code reference underneath
 tells you exactly which file implements what you're looking at.
 
@@ -292,6 +293,158 @@ block — at:
 ```
 GET /api/trace/:requestId
 ```
+
+
+## Path to production: cloud hosting, observability & the full delivery pipeline
+
+Everything above runs as a single Node process with in-memory state — exactly
+right for a classroom demo, wrong for production. This section is the honest
+answer to "what changes when this ships for real": which in-memory module
+gets replaced by which cloud-native service, and what a full ticket-to-alert
+delivery pipeline looks like end to end.
+
+### Cloud hosting & container platform
+
+The app is already a stateless Express server, so containerizing it is a
+small step — add a `Dockerfile`, push to a registry, run it anywhere that
+runs containers. Pick based on team size and how much orchestration you
+actually need:
+
+| Platform | AWS | GCP | Azure | Best fit |
+|---|---|---|---|---|
+| Serverless containers | App Runner | Cloud Run | Container Apps | Smallest ops burden, spiky/low traffic, fastest to ship |
+| Managed container orchestration | ECS (Fargate) | Cloud Run for Anthos | Container Apps | Mid-size team, some infra control, no cluster to manage |
+| Full Kubernetes | EKS | GKE | AKS | Already standardized on k8s elsewhere in the org |
+
+For this app specifically — a stateless API with no persistent local
+storage once `session-store.js`/`approval-queue.js` move to real backing
+stores (see below) — **serverless containers (Cloud Run / App Runner /
+Container Apps) are the pragmatic default**: no cluster to patch, scales to
+zero, and the whole point of Steps 1-14 was keeping every layer a plain
+function call, which serverless containers don't fight against.
+
+### Swapping in-memory modules for cloud-native services
+
+Every `Map()` in this codebase is a clearly-labeled placeholder. Here's what
+replaces each one in production:
+
+| Demo module (in-memory) | Production replacement |
+|---|---|
+| `server/db/session-store.js` (`Map`) | Redis (ElastiCache / Memorystore) for hot session data; Postgres/DynamoDB if you need durable conversation history |
+| `server/approvals/approval-queue.js` (`Map`) | Real message broker — SQS, Pub/Sub, or RabbitMQ — with a worker service (or Lambda) consuming it |
+| `server/observability/tracer.js` (`Map`, console) | OpenTelemetry SDK in the app → OTLP exporter → CloudWatch/X-Ray, Datadog, or Grafana Tempo + Loki |
+| `server/cost/cost-tracker.js` (`Map`) | Emit cost as a custom metric (CloudWatch Metrics / Datadog Custom Metrics) instead of holding it in process memory; pair with cloud billing tools below |
+| Static `DEMO_OTP` | Real OTP via Twilio/SNS, short-lived code in Redis, not a constant |
+
+### Observability & cost tracking, cloud-native
+
+| Concern | AWS-native | Vendor-agnostic |
+|---|---|---|
+| Logs & traces | CloudWatch Logs + X-Ray | OpenTelemetry → Grafana Tempo/Loki, or Datadog |
+| Dashboards & alerting | CloudWatch Dashboards + Alarms | Grafana + Prometheus, or Datadog Monitors |
+| LLM-specific cost tracking | Custom metric per `costTracker.recordUsage()` call → CloudWatch → Budget alarm | Anthropic Console's usage dashboard for token-level spend, correlated with your own per-session metric |
+| Infra cost tracking | AWS Cost Explorer + Budgets | Kubecost (if on Kubernetes), OpenCost |
+| Alert routing | CloudWatch Alarm → SNS → Slack webhook | Datadog Monitor → Slack integration directly |
+
+The `requestId`-per-trace pattern already in `tracer.js` maps directly onto
+OpenTelemetry's `trace_id` — the instrumentation shape doesn't change, only
+where the data ends up.
+
+### The end-to-end delivery pipeline
+
+This is the full loop from a requirement being written down to a production
+alert firing in Slack. Steps in **solid** arrows are plain CI automation
+(GitHub Actions can run them directly, including automated testing gated on
+the SonarQube report); steps in *dashed* arrows involve an AI agent
+(Claude Code / a review agent) and are triggered *by* CI but not fully
+executed *inside* a YAML file.
+
+```mermaid
+flowchart TD
+    REQ["requirements.txt<br/>(or a lightweight requirements UI)"]
+    JIRA["JIRA — stories created &<br/>auto-assigned to developers"]
+    CODE["Claude Code picks up the<br/>'Ready for Dev' story and implements it"]
+    UNIT["Unit tests<br/>(Claude Code runs them before opening a PR)"]
+    REVIEW["Code Reviewer Agent<br/>reviews the diff as a required PR check"]
+    SONAR["SonarQube scan —<br/>quality gate must pass"]
+    AUTOTEST["Automated testing runs<br/>against the SonarQube report,<br/>results published to Test-cases.csv"]
+    BUILD["Build & push Docker image"]
+    DEPLOY["Deploy to container platform<br/>(Cloud Run / ECS / AKS / etc.)"]
+    OBS["Monitoring, observability &<br/>cost tracking come online"]
+    SCAN["Qualys web scan against<br/>the live URL"]
+    SLACK["Slack notification —<br/>production alerts & pipeline status"]
+
+    REQ -.->|MCP/JIRA API sync| JIRA
+    JIRA -.->|agent picks up story| CODE
+    CODE --> UNIT
+    UNIT -.->|opens PR| REVIEW
+    REVIEW --> SONAR
+    SONAR --> AUTOTEST
+    AUTOTEST --> BUILD
+    BUILD --> DEPLOY
+    DEPLOY --> OBS
+    DEPLOY --> SCAN
+    OBS -.-> SLACK
+    SCAN -.-> SLACK
+
+    classDef auto fill:#EAF3DE,stroke:#639922,color:#173404
+    classDef agent fill:#E6F1FB,stroke:#378ADD,color:#042C53
+    classDef gate fill:#FAEEDA,stroke:#EF9F27,color:#412402
+
+    class UNIT,SONAR,AUTOTEST,BUILD,DEPLOY,OBS,SCAN auto
+    class JIRA,CODE,REVIEW agent
+    class SLACK gate
+```
+
+**Stage by stage:**
+
+1. **Requirements → JIRA.** A change to `requirements.txt` (or a lightweight
+   internal requirements UI) triggers a small sync script — this runs as a
+   Claude Code task or a scheduled job using the **Atlassian Rovo MCP
+   connector** (or the JIRA REST API directly), not literally inside a
+   GitHub Actions runner, since MCP servers are invoked by an agent session.
+   It creates/updates JIRA stories and assigns them based on a
+   CODEOWNERS-style mapping.
+2. **Claude Code implements the story.** Pointed at a "Ready for Dev" JIRA
+   ticket, Claude Code checks out a branch, implements the change, and opens
+   a draft PR.
+3. **Unit tests.** Claude Code runs the project's test suite (for this repo,
+   that's `npm run evals` plus any unit tests you add) before marking the PR
+   ready — this step is fully scriptable in CI as a required check.
+4. **Code Reviewer Agent.** A second Claude session, configured as a
+   reviewer, reads the diff against the repo's conventions and leaves PR
+   comments; merge is blocked until flagged issues are resolved. This is a
+   GitHub Actions job that calls the Claude API on `pull_request` events.
+5. **SonarQube quality gate.** Standard CI step — `sonar-scanner` runs on
+   every push, and the quality gate (coverage %, code smells, vulnerability
+   count) is a required status check before merge.
+6. **Automated testing, gated on the SonarQube report.** Once the quality
+   gate passes, an automated test runner executes against the codebase —
+   driven by the SonarQube report's coverage/hotspot data to prioritize
+   what gets exercised — and writes results straight to `Test-cases.csv`.
+   No human sign-off in the loop here: a failing test run blocks the
+   pipeline the same way a failed quality gate does.
+7. **Build & deploy.** On merge to `main`, CI builds the Docker image, pushes
+   to the registry, and deploys to whichever container platform you picked
+   above.
+8. **Observability & cost tracking come online** automatically once the new
+   revision is live, using the cloud-native tooling from the table above.
+9. **Qualys scan.** A post-deploy job kicks off a Qualys Web Application
+   Scan against the live URL; the release isn't marked complete until the
+   scan comes back clean (or with only accepted-risk findings).
+10. **Slack alerts.** Deploy success/failure, quality-gate failures, scan
+    findings, and any production alert (error-rate spike, cost anomaly)
+    all route to a Slack channel via webhook — the last mile so a human
+    finds out immediately, not by checking a dashboard.
+
+A starter GitHub Actions workflow implementing the fully-automatable steps
+(3, 5, 6, 7, 8-trigger, 10) is at
+[`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml). The
+agent-driven steps (1, 2, 4) are deliberately left as named placeholder
+jobs in that file with comments explaining what real implementation
+replaces them — wiring those up depends on which JIRA instance, which
+Claude Code deployment mode, and which SonarQube/Qualys accounts you're
+using, which isn't something a template file can guess for you.
 
 ## What's simplified for the demo (and how to harden it for real use)
 
