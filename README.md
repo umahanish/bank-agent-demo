@@ -1,11 +1,12 @@
 # Brightly Bank — Agentic Banking Chatbot Demo
 
-A runnable, production-shaped reference implementation of the architecture in
-*Bank-Chatbot.docx* — built for a student demo. It starts from 3 boxes (chat
-UI → agent → LLM) and ends at the full 14-step diagram: multi-agent
+Ever wondered how a "simple" chatbot becomes a production banking system? This
+demo shows the whole journey — starting from 3 boxes (chat UI → agent → LLM)
+and building up, step by step, into a full 14-stage architecture: multi-agent
 coordination, MCP-style tools, auth vs. authz, session memory, hybrid LLM +
 PII redaction, prompt-injection guardrails, evals, observability, cost
-tracking, and human-in-the-loop approvals.
+tracking, and human-in-the-loop approvals. Everything here actually runs —
+clone it, chat with it, and watch each concept click into place.
 
 ## Demo mode: skipping real OTP delivery
 
