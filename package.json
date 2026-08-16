@@ -1,0 +1,23 @@
+{
+  "name": "bank-agent-demo",
+  "version": "1.0.0",
+  "description": "Production-shaped agentic banking chatbot demo (multi-agent + MCP + auth/z + PII redaction + evals + observability + cost tracking + human-in-the-loop)",
+  "main": "server/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "evals": "node server/evals/run-evals.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "jsonwebtoken": "^9.0.2",
+    "uuid": "^14.0.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

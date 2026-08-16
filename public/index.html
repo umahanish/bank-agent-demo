@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Brightly Bank — Chat with us</title>
+<style>
+  :root{
+    --navy:#122A46; --navy-dark:#0D1F35;
+    --bg:#EEF1F4; --card:#FFFFFF; --panel:#F4F6F8;
+    --ink:#1E2430; --sub:#8A93A0; --border:#E3E7EC;
+    --user-bubble:#122A46; --bot-bubble:#EDEFF2; --green:#3DBE6B;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; background:var(--bg); color:var(--ink); padding:28px 16px; }
+  .wrap{max-width:460px; margin:0 auto;}
+
+  .login-card{ background:var(--card); border-radius:14px; padding:28px 22px; box-shadow:0 8px 24px rgba(18,42,70,0.10); }
+  .login-card h2{ margin:0 0 6px; font-size:18px; }
+  .login-card p{ color:var(--sub); font-size:13.5px; margin:0 0 18px; }
+  .login-card select, .login-card button{ width:100%; padding:11px 14px; border-radius:10px; border:1.5px solid var(--border); font-size:14.5px; margin-bottom:10px; font-family:inherit; }
+  .login-card button{ background:var(--navy); color:#fff; border:none; font-weight:600; cursor:pointer; }
+
+  .chat-card{ background:var(--card); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; height:74vh; min-height:520px; box-shadow:0 8px 24px rgba(18,42,70,0.10); }
+  .header{ background:var(--navy); color:#fff; padding:16px 18px; display:flex; align-items:center; gap:12px; justify-content:space-between; }
+  .header-left{ display:flex; align-items:center; gap:12px; }
+  .avatar{ width:42px; height:42px; border-radius:50%; background:var(--navy-dark); display:flex; align-items:center; justify-content:center; font-size:20px; flex:0 0 auto; }
+  .header-text .name{ font-weight:700; font-size:16px; line-height:1.3; }
+  .header-text .status{ font-size:12.5px; color:#B9C4D3; display:flex; align-items:center; gap:5px; margin-top:2px; }
+  .dot{ width:7px; height:7px; border-radius:50%; background:var(--green); display:inline-block; }
+  .logout{ background:none; border:1px solid #3A5478; color:#cfd9e6; font-size:12px; padding:6px 10px; border-radius:8px; cursor:pointer; }
+
+  .messages{ flex:1; overflow-y:auto; padding:18px; background:var(--panel); display:flex; flex-direction:column; gap:14px; }
+  .row{ display:flex; flex-direction:column; max-width:80%; }
+  .row.user{ align-self:flex-end; align-items:flex-end; }
+  .row.bot{ align-self:flex-start; align-items:flex-start; }
+  .bubble{ padding:12px 15px; border-radius:16px; font-size:14.5px; line-height:1.5; white-space:pre-wrap; }
+  .row.user .bubble{ background:var(--user-bubble); color:#fff; border-bottom-right-radius:4px; }
+  .row.bot .bubble{ background:var(--bot-bubble); color:var(--ink); border-bottom-left-radius:4px; }
+  .row.error .bubble{ background:#FBEAEA; color:#8A2E2E; }
+  .timestamp{ font-size:11.5px; color:var(--sub); margin-top:5px; padding:0 4px; }
+  .typing{ align-self:flex-start; font-size:13px; color:var(--sub); padding:2px 6px; }
+  .meta{ align-self:flex-start; font-size:11px; color:var(--sub); padding:0 6px; }
+
+  .input-row{ display:flex; gap:8px; padding:14px; border-top:1px solid var(--border); background:var(--card); }
+  input[type=text]{ flex:1; padding:11px 14px; border-radius:22px; border:1.5px solid var(--border); font-size:14.5px; outline:none; font-family:inherit; background:var(--panel); }
+  input[type=text]:focus{ border-color:var(--navy); }
+  button.send{ padding:0 20px; border:none; border-radius:22px; background:var(--navy); color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
+  button.send:disabled{ opacity:.4; cursor:not-allowed; }
+
+  .hidden{ display:none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="login-card" id="loginCard">
+    <h2>Brightly Bank</h2>
+    <p>Demo login — pick a customer to see how authorization differs between them.</p>
+    <select id="userSelect">
+      <option value="john">John (credit-limit self-service enabled)</option>
+      <option value="sanjay">Sanjay (no self-service permission)</option>
+    </select>
+    <button id="loginBtn">Log in</button>
+  </div>
+
+  <div class="chat-card hidden" id="chatCard">
+    <div class="header">
+      <div class="header-left">
+        <div class="avatar">🏦</div>
+        <div class="header-text">
+          <div class="name">Brightly Bank</div>
+          <div class="status"><span class="dot"></span><span id="statusText">Online · Chat with us</span></div>
+        </div>
+      </div>
+      <button class="logout" id="logoutBtn">Switch user</button>
+    </div>
+
+    <div class="messages" id="messages"></div>
+
+    <div class="input-row">
+      <input type="text" id="inputBox" placeholder="Type a message..." autocomplete="off">
+      <button class="send" id="sendBtn">Send</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_BASE = ""; // same origin — server serves this file too
+let token = null;
+let currentUser = null;
+const sessionId = "sess-" + Math.random().toString(36).slice(2);
+
+const loginCard = document.getElementById('loginCard');
+const chatCard = document.getElementById('chatCard');
+const userSelect = document.getElementById('userSelect');
+const loginBtn = document.getElementById('loginBtn');
+const logoutBtn = document.getElementById('logoutBtn');
+const messagesEl = document.getElementById('messages');
+const inputBox = document.getElementById('inputBox');
+const sendBtn = document.getElementById('sendBtn');
+const statusText = document.getElementById('statusText');
+
+function timeNow(){
+  const d = new Date();
+  let h = d.getHours(), m = d.getMinutes();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  m = m < 10 ? '0'+m : m;
+  return h + ':' + m + ' ' + ampm;
+}
+
+function addMessage(role, text){
+  const row = document.createElement('div');
+  row.className = 'row ' + role;
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = text;
+  const time = document.createElement('div');
+  time.className = 'timestamp';
+  time.textContent = timeNow();
+  row.appendChild(bubble);
+  row.appendChild(time);
+  messagesEl.appendChild(row);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+loginBtn.addEventListener('click', async () => {
+  const username = userSelect.value;
+  loginBtn.disabled = true;
+  loginBtn.textContent = 'Logging in...';
+  try{
+    const res = await fetch(API_BASE + '/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username })
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Login failed');
+    token = data.token;
+    currentUser = data.user;
+
+    loginCard.classList.add('hidden');
+    chatCard.classList.remove('hidden');
+    statusText.textContent = 'Online · Chat with us';
+    messagesEl.innerHTML = '';
+    addMessage('bot', `Welcome ${currentUser.name}! How can I help you today?`);
+    inputBox.focus();
+  }catch(err){
+    alert(err.message);
+  }finally{
+    loginBtn.disabled = false;
+    loginBtn.textContent = 'Log in';
+  }
+});
+
+logoutBtn.addEventListener('click', () => {
+  token = null;
+  currentUser = null;
+  chatCard.classList.add('hidden');
+  loginCard.classList.remove('hidden');
+});
+
+async function sendMessage(){
+  const text = inputBox.value.trim();
+  if(!text || !token) return;
+  inputBox.value = '';
+  sendBtn.disabled = true;
+
+  addMessage('user', text);
+
+  const typingEl = document.createElement('div');
+  typingEl.className = 'typing';
+  typingEl.textContent = 'Typing...';
+  messagesEl.appendChild(typingEl);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+
+  try{
+    const res = await fetch(API_BASE + '/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ sessionId, message: text })
+    });
+    const data = await res.json();
+    typingEl.remove();
+
+    if(!res.ok){
+      addMessage('error', data.error || 'Something went wrong.');
+      return;
+    }
+    addMessage('bot', data.reply);
+
+    if(typeof data.costSoFarCents === 'number'){
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = `Session cost so far: ${data.costSoFarCents.toFixed(3)}¢` + (data.llmCallsThisTurn ? ` · ${data.llmCallsThisTurn} LLM call(s) this turn` : '');
+      messagesEl.appendChild(meta);
+    }
+  }catch(err){
+    typingEl.remove();
+    addMessage('error', 'Network error: ' + err.message);
+  }finally{
+    sendBtn.disabled = false;
+    inputBox.focus();
+  }
+}
+
+sendBtn.addEventListener('click', sendMessage);
+inputBox.addEventListener('keydown', e => { if(e.key === 'Enter') sendMessage(); });
+</script>
+</body>
+</html>
