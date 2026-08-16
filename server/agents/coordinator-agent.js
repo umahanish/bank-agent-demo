@@ -12,6 +12,7 @@ const accountsAgent = require("./accounts-agent");
 const transactionAgent = require("./transaction-agent");
 const serviceAgent = require("./service-agent");
 const { detectAndRedact } = require("../security/pii-redaction");
+const { DEMO_OTP } = require("../mock-data/bank-db");
 
 const SUB_AGENTS = {
   accounts_agent: accountsAgent,
@@ -101,7 +102,12 @@ async function handleTurn({ userText, userId, stepUpVerified, costTracker, sessi
 
   if (pendingAuth) {
     return {
-      reply: "That action needs a quick identity check. I've sent an OTP to your registered mobile — could you type it here?",
+      // DEMO_MODE: in production this line would just say an OTP was sent,
+      // and the customer would read it off their own phone. We print it
+      // here so a demo/classroom run never blocks on a real SMS — see
+      // README.md "Demo mode: skipping real OTP delivery" for how to wire
+      // up real delivery (Twilio/SNS) instead.
+      reply: `That action needs a quick identity check. In a real deployment this sends an OTP via SMS — for this demo, your OTP is ${DEMO_OTP}. Go ahead and type it here.`,
       pendingAuth
     };
   }

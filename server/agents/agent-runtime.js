@@ -91,6 +91,21 @@ async function runSubAgent({
       }
 
       if (auth.decision === "step_up_required") {
+        // DEMO_MODE: set DEMO_SKIP_STEP_UP=true in .env to skip the OTP
+        // round-trip entirely and treat every step-up as pre-verified —
+        // useful for a fast walkthrough where identity isn't the point of
+        // that particular demo beat. Leave it unset/false to show the real
+        // challenge/response flow (see coordinator-agent.js for where the
+        // demo OTP is revealed in-chat instead of sent via SMS).
+        if (process.env.DEMO_SKIP_STEP_UP === "true") {
+          tracer.log(`${agentName}.step_up_bypassed_demo_mode`, block.name);
+          const rawResult = await mcpServer.callTool(block.name, block.input || {}, { userId });
+          const result = guardToolResult(rawResult, { toolName: block.name, tracer, agentName });
+          tracer.log(`${agentName}.tool_result`, { tool: block.name, result });
+          toolResults.push({ type: "tool_result", tool_use_id: block.id, content: result });
+          continue;
+        }
+
         // Pause the whole turn — the caller (coordinator-agent) surfaces an
         // OTP prompt and resumes this exact tool call once verified.
         tracer.log(`${agentName}.step_up_required`, block.name);
@@ -130,11 +145,6 @@ async function runSubAgent({
   }
 
   return { text: "I ran out of turns handling that — please try again.", pendingAuth: null };
-}
-
-function mcpServerName(mcpServer) {
-  if (mcpServer === serviceMcp) return "service";
-  return mcpServer.name || "unknown";
 }
 
 module.exports = { runSubAgent };
