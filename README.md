@@ -318,7 +318,7 @@ GET /api/trace/:requestId
 
 
 
-## Path to production: cloud hosting, observability & the full delivery pipeline
+# Path to production: cloud hosting, observability & the full delivery pipeline
 
 Everything above runs as a single Node process with in-memory state — exactly
 right for a classroom demo, wrong for production. This section is the honest
@@ -326,7 +326,7 @@ answer to "what changes when this ships for real": which in-memory module
 gets replaced by which cloud-native service, and what a full ticket-to-alert
 delivery pipeline looks like end to end.
 
-### Cloud hosting & container platform
+## Cloud hosting & container platform
 
 The app is already a stateless Express server, so containerizing it is a
 small step — add a `Dockerfile`, push to a registry, run it anywhere that
@@ -346,7 +346,7 @@ Container Apps) are the pragmatic default**: no cluster to patch, scales to
 zero, and the whole point of Steps 1-14 was keeping every layer a plain
 function call, which serverless containers don't fight against.
 
-### Swapping in-memory modules for cloud-native services
+## Swapping in-memory modules for cloud-native services
 
 Every `Map()` in this codebase is a clearly-labeled placeholder. Here's what
 replaces each one in production:
@@ -359,7 +359,7 @@ replaces each one in production:
 | `server/cost/cost-tracker.js` (`Map`) | Emit cost as a custom metric (CloudWatch Metrics / Datadog Custom Metrics) instead of holding it in process memory; pair with cloud billing tools below |
 | Static `DEMO_OTP` | Real OTP via Twilio/SNS, short-lived code in Redis, not a constant |
 
-### Observability & cost tracking, cloud-native
+## Observability & cost tracking, cloud-native
 
 | Concern | AWS-native | Vendor-agnostic |
 |---|---|---|
@@ -373,7 +373,7 @@ The `requestId`-per-trace pattern already in `tracer.js` maps directly onto
 OpenTelemetry's `trace_id` — the instrumentation shape doesn't change, only
 where the data ends up.
 
-### The end-to-end delivery pipeline
+## The end-to-end delivery pipeline
 
 This is the full loop from a requirement being written down to a production
 alert firing in Slack. Steps in **solid** arrows are plain CI automation
