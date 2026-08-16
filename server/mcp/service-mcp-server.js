@@ -49,10 +49,12 @@ async function callTool(name, input, ctx) {
       return `New cheque book requested, to be delivered to: ${user.address}. Arrives in 5-7 business days.`;
     case "kyc_update":
       return `KYC update request started. A secure document-upload link has been sent to the customer's registered mobile number.`;
-    case "increase_credit_limit":
+    case "increase_credit_limit": {
+      const previousLimit = user.account.creditLimit;
       user.account.creditLimit = input.new_limit;
-      return `Credit limit updated to ${user.account.currency} ${input.new_limit}.`;
-    default:
+      return `Credit limit updated from ${user.account.currency} ${previousLimit} to ${user.account.currency} ${input.new_limit}.`;
+      }
+      default:
       return `Unknown tool: ${name}`;
   }
 }
