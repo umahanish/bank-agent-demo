@@ -294,6 +294,29 @@ block — at:
 GET /api/trace/:requestId
 ```
 
+## What's simplified for the demo (and how to harden it for real use)
+
+- **MCP servers are in-process modules**, not real MCP protocol servers over
+  stdio/SSE. The tool-shaped interface (`TOOLS`, `callTool`) is the same
+  shape a real `@modelcontextprotocol/sdk` server would expose — swapping in
+  the real SDK is a contained change inside `server/mcp/`.
+- **Session store, approval queue, and cost tracker are in-memory** (`Map`s).
+  Swap for Redis/Postgres and a real broker for anything beyond a demo — the
+  function signatures are deliberately small so this is a drop-in change.
+- **The self-hosted LLM is a deterministic stub**, not a real on-prem model.
+  It exists to make the hybrid-routing *decision* demonstrable without
+  requiring a second model deployment for a classroom demo.
+- **Edge layer** only implements rate limiting. A real deployment adds a WAF,
+  DDoS protection, and API-gateway-level schema validation in front of this
+  same Express app — none of which changes application code, which is the
+  point of keeping them at the edge.
+- **Failure handling**: add retries with backoff around `callClaude()` for
+  transient API errors, and a circuit breaker if you're chaining multiple
+  LLM calls per turn (this demo already caps loop length via
+  `MAX_LLM_CALLS_PER_TURN`, which is the cheapest form of failure handling —
+  bounding the blast radius of a confused agent).
+
+
 
 ## Path to production: cloud hosting, observability & the full delivery pipeline
 
@@ -446,24 +469,4 @@ replaces them — wiring those up depends on which JIRA instance, which
 Claude Code deployment mode, and which SonarQube/Qualys accounts you're
 using, which isn't something a template file can guess for you.
 
-## What's simplified for the demo (and how to harden it for real use)
 
-- **MCP servers are in-process modules**, not real MCP protocol servers over
-  stdio/SSE. The tool-shaped interface (`TOOLS`, `callTool`) is the same
-  shape a real `@modelcontextprotocol/sdk` server would expose — swapping in
-  the real SDK is a contained change inside `server/mcp/`.
-- **Session store, approval queue, and cost tracker are in-memory** (`Map`s).
-  Swap for Redis/Postgres and a real broker for anything beyond a demo — the
-  function signatures are deliberately small so this is a drop-in change.
-- **The self-hosted LLM is a deterministic stub**, not a real on-prem model.
-  It exists to make the hybrid-routing *decision* demonstrable without
-  requiring a second model deployment for a classroom demo.
-- **Edge layer** only implements rate limiting. A real deployment adds a WAF,
-  DDoS protection, and API-gateway-level schema validation in front of this
-  same Express app — none of which changes application code, which is the
-  point of keeping them at the edge.
-- **Failure handling**: add retries with backoff around `callClaude()` for
-  transient API errors, and a circuit breaker if you're chaining multiple
-  LLM calls per turn (this demo already caps loop length via
-  `MAX_LLM_CALLS_PER_TURN`, which is the cheapest form of failure handling —
-  bounding the blast radius of a confused agent).
